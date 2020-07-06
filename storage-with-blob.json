@@ -1,0 +1,94 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storageAccountName": {
+            "type": "string",
+            "defaultValue": "[concat('storage', uniqueString(resourceGroup().id))]",
+            "metadata": {
+                "description": "Specifies the name of the Azure Storage account."
+            }
+        },
+        "containerName": {
+            "type": "string",
+            "defaultValue": "logs",
+            "metadata": {
+                "description": "Specifies the name of the blob container."
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Specifies the location in which the Azure Storage resources should be deployed."
+            }
+        },
+        "resourceTags": {
+			"type": "string",
+			"allowedValues":[
+				"all"
+			]
+		}
+    },
+    "variables": {
+        "tagValues": {
+			
+            "all": {
+                "BusinessCapability": "Core Services",
+                "BusinessTeam": "Cloud Services Group",
+				"Capability": "Bastion",
+				"CreatedBy": "Rex Trotter",
+				"CreatedOn": "4/6/20",
+				"Program": "CS",
+				"SystemOwner": "Rex Trotter",
+				"SystemOwnerTeam": "Cloud Engineering & Mission Assurance"            
+			}
+		}
+    },
+    "resources": [
+        {
+            "name": "[parameters('storageAccountName')]",
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2018-07-01",
+            "location": "[parameters('location')]",
+            "kind": "StorageV2",
+            "sku": {
+                "name": "Standard_LRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "accessTier": "Hot"
+            },
+            "tags": {
+                    "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                    "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                    "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                    "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                    "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                    "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                    "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",   
+                    "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]"
+      },
+            "resources": [
+                {
+                    "name": "[concat('default/', parameters('containerName'))]",
+                    "type": "blobServices/containers",
+                    "apiVersion": "2018-07-01",
+                    "dependsOn": [
+                        "[parameters('storageAccountName')]"
+                    ],
+                    "tags": {
+                        "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                        "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                        "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                        "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                        "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                        "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                        "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",   
+                        "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]"
+        }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,774 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "gwdnsLabelPrefix": {
+            "defaultValue": "rdgtwy",
+            "type": "String",
+            "metadata": {
+                "description": "Unique gateway public DNS prefix for the deployment. The fqdn will look something like '<dnsname>.westus.cloudapp.azure.com'. Up to 62 chars, digits or dashes, lowercase, should start with a letter: must conform to '^[a-z][a-z0-9-]{1,61}[a-z0-9]$'. For example johndns1 will result the final RDWEB access url like https://johndns1.westus.cloudapp.azure.com/RDWeb"
+            }
+        },
+        "gwpublicIPAddressName": {
+            "defaultValue": "RD-GATEWAY-IP",
+            "type": "String",
+            "metadata": {
+                "description": "The name of gateway PublicIPAddress object"
+            }
+        },
+        "adDomainName": {
+            "defaultValue": "cacidhsportal.onmicrosoft",
+            "type": "String",
+            "metadata": {
+                "description": "The name of the AD domain. For example contoso.com"
+            }
+        },
+        "adminUsername": {
+            "defaultValue": "prabhjot.singh",
+            "type": "String",
+            "metadata": {
+                "description": "The name of the administrator of the new VM and the domain. Exclusion list: 'administrator'. For example johnadmin"
+            }
+        },
+        "adminPassword": {
+            "type": "SecureString",
+            "metadata": {
+                "description": "The password for the administrator account of the new VM and the domain"
+            }
+        },
+        "imageSKU": {
+            "defaultValue": "2019-Datacenter",
+            "allowedValues": [
+                "2019-Datacenter",
+                "2016-Datacenter"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "Windows server SKU"
+            }
+        },
+        "numberOfRdshInstances": {
+            "defaultValue": 1,
+            "type": "Int",
+            "metadata": {
+                "description": "Number of RemoteDesktopSessionHosts"
+            }
+        },
+        "rdshVmSize": {
+            "defaultValue": "Standard_B2s",
+            "allowedValues": [
+                "Standard_B2s",
+                "Standard_A2m_v2",
+                "Standard_A2m_v2",
+                "Standard_A2_v2",
+                "Standard_A1_v2"
+            ],
+            "type": "String",
+            "metadata": {
+                "description": "The size of the RDSH VMs"
+            }
+        },
+        "dnsServerPrivateIp": {
+            "defaultValue": "10.1.1.8",
+            "type": "String"
+        },
+        "subnetName": {
+            "defaultValue": "aadds-subnet",
+            "type": "String"
+        },
+        "virtualNetworkId": {
+            "defaultValue": "/subscriptions/e603108c-9caa-4d64-9c49-b31dee71f1d8/resourceGroups/vdi-pool/providers/Microsoft.Network/virtualNetworks/aadds-vnet",
+            "type": "String"
+        },
+        "nsgName": {
+            "defaultValue": "aadds-nsg",
+            "type": "String"
+        },
+        "resourceTags": {
+            "allowedValues": [
+                "all"
+            ],
+            "type": "String"
+        },
+        "location": {
+            "defaultValue": "[resourceGroup().location]",
+            "type": "String",
+            "metadata": {
+                "description": "Location for all resources."
+            }
+        }
+    },
+    "variables": {
+        "subnetRef": "[concat(parameters('virtualNetworkId'), '/subnets/', parameters('subnetName'))]",
+        "assetLocation": "https://csservicesstor.blob.core.windows.net/assets",
+        "gwLBName": "GW-LB",
+        "gwIPAddressID": "[resourceId('Microsoft.Network/publicIPAddresses',parameters('gwpublicIPAddressName'))]",
+        "gwlbFE": "GWLBFE",
+        "gwlbID": "[resourceId('Microsoft.Network/loadBalancers',variables('gwLBName'))]",
+        "gwlbFEConfigID": "[concat(variables('gwlbID'),'/frontendIPConfigurations/',variables('gwlbFE'))]",
+        "gwlbBE": "GWLBBE",
+        "gwBEAddressPoolID": "[concat(variables('gwlbID'),'/backendAddressPools/',variables('gwlbBE'))]",
+        "storageAccountName": "[tolower(concat('rdsa',uniqueString(resourceGroup().id)))]",
+        "storageAccountType": "Standard_LRS",
+        "uniqueStorageAccountContainerName": "[tolower(concat('sc', uniqueString(resourceGroup().id)))]",
+        "imagePublisher": "MicrosoftWindowsServer",
+        "imageOffer": "WindowsServer",
+        "nsgName": "[parameters('nsgName')]",
+        "nsgID": "[resourceId('Microsoft.Network/networkSecurityGroups',variables('nsgName'))]",
+        "tagValues": {
+            "all": {
+                "AccessType": "RDP",
+                "ADDomain": "VAL",
+                "AssociatedApplication": "RdWeb",
+                "AvailabilityDays": "all",
+                "AvailabilityStartTime": "1200",
+                "AvailabilityStopTime": "1200",
+                "AvailabilityTimeZone": "UTC",
+                "BuiltFromTemplate": "RDS-Farm-Full",
+                "BusinessCapability": "Core Services",
+                "BusinessTeam": "Cloud Services Group",
+                "Capability": "RDgateway",
+                "ChangeManagementSystem": "None",
+                "CreatedBy": "Prabhjot Singh",
+                "CreatedOn": "07/02/20",
+                "DerivedFrom": "None",
+                "EightyFivePercentSTIG": "no",
+                "Environment": "TEST",
+                "Function": "Test deployment of RDS farm",
+                "InternalVMSize": "XS",
+                "IsCoreService": "No",
+                "IsSecuritySupportStructure": "yes",
+                "OpenCatIControlItemCount": "0",
+                "OpenCatIIControlItemCount": "0",
+                "OpenCatIIIControlItemCount": "0",
+                "OperatingHours": "24x7",
+                "OperatingSystem": "Windows",
+                "OSDistribution": "Datacenter 2019",
+                "Program": "CS",
+                "ResourceExpirationDate": "08/02/20",
+                "STIGVersion": "None",
+                "SystemOwner": "Prabhjot Singh",
+                "SystemOwnerTeam": "Cloud Engineering & Mission Assurance",
+                "TemplateBlueprintVersion": "V1.0",
+                "DNSName": ""
+            }
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2015-06-15",
+            "name": "[parameters('gwpublicIPAddressName')]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "Derived From": "[variables('tagValues')[parameters('resourceTags')].DerivedFrom]",
+                "Is Core Service": "[variables('tagValues')[parameters('resourceTags')].IsCoreService]",
+                "Is Security Support Structure": "[variables('tagValues')[parameters('resourceTags')].IsSecuritySupportStructure]",
+                "Environment": "[variables('tagValues')[parameters('resourceTags')].Environment]",
+                "Resource Expiration Date": "[variables('tagValues')[parameters('resourceTags')].ResourceExpirationDate]",
+                "Template or Blueprint Version": "[variables('tagValues')[parameters('resourceTags')].TemplateBlueprintVersion]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Dynamic",
+                "dnsSettings": {
+                    "domainNameLabel": "[parameters('gwdnsLabelPrefix')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/loadBalancers",
+            "apiVersion": "2015-06-15",
+            "name": "[variables('gwlbName')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[variables('gwIPAddressID')]"
+            ],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "frontendIPConfigurations": [
+                    {
+                        "name": "[variables('gwlbFE')]",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[variables('gwIPAddressID')]"
+                            }
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "[variables('gwlbBE')]"
+                    }
+                ],
+                "loadBalancingRules": [
+                    {
+                        "name": "LBRule01",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[variables('gwlbFEConfigID')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[variables('gwBEAddressPoolID')]"
+                            },
+                            "protocol": "Tcp",
+                            "frontendPort": 443,
+                            "backendPort": 443,
+                            "enableFloatingIP": false,
+                            "idleTimeoutInMinutes": 5,
+                            "loadDistribution": "SourceIPProtocol",
+                            "probe": {
+                                "id": "[concat(variables('gwlbID'),'/probes/tcpProbe')]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "LBRule02",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[variables('gwlbFEConfigID')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[variables('gwBEAddressPoolID')]"
+                            },
+                            "protocol": "Udp",
+                            "frontendPort": 3391,
+                            "backendPort": 3391,
+                            "enableFloatingIP": false,
+                            "idleTimeoutInMinutes": 5,
+                            "loadDistribution": "SourceIPProtocol",
+                            "probe": {
+                                "id": "[concat(variables('gwlbID'),'/probes/tcpProbe01')]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "tcpProbe",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "port": 443,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    },
+                    {
+                        "name": "tcpProbe01",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "port": 3391,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    }
+                ],
+                "inboundNatRules": [
+                    {
+                        "name": "rdp",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[variables('gwlbFEConfigID')]"
+                            },
+                            "protocol": "Tcp",
+                            "frontendPort": 3389,
+                            "backendPort": 3389,
+                            "enableFloatingIP": false
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2015-06-15",
+            "name": "[variables('storageAccountName')]",
+            "location": "[parameters('location')]",
+            "properties": {
+                "accountType": "[variables('storageAccountType')]"
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2015-06-15",
+            "name": "GW-NIC",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[variables('gwlbID')]"
+            ],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            },
+                            "loadBalancerBackendAddressPools": [
+                                {
+                                    "id": "[variables('gwBEAddressPoolID')]"
+                                }
+                            ],
+                            "loadBalancerInboundNatRules": [
+                                {
+                                    "id": "[concat(variables('gwlbID'),'/inboundNatRules/rdp')]"
+                                }
+                            ],
+                            "networkSecurityGroup": {
+                                "id": "[variables('nsgId')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2015-06-15",
+            "name": "CB-NIC",
+            "location": "[parameters('location')]",
+            "dependsOn": [],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            }
+                        }
+                    }
+                ],
+                "networkSecurityGroup": {
+                    "id": "[variables('nsgId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2015-06-15",
+            "name": "[concat('rdsh-', copyindex(), '-nic')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            }
+                        }
+                    }
+                ],
+                "networkSecurityGroup": {
+                    "id": "[variables('nsgID')]"
+                }
+            },
+            "copy": {
+                "name": "rdsh-nic-loop",
+                "count": "[parameters('numberOfRdshInstances')]"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2015-06-15",
+            "name": "GW-VMS-01",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
+                "Microsoft.Network/networkInterfaces/GW-NIC"
+            ],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Internal VM Size": "[variables('tagValues')[parameters('resourceTags')].InternalVMSize]",
+                "Built From Template": "[variables('tagValues')[parameters('resourceTags')].BuiltFromTemplate]",
+                "Change Management System": "[variables('tagValues')[parameters('resourceTags')].ChangeManagementSystem]",
+                "Operating Hours": "[variables('tagValues')[parameters('resourceTags')].OperatingHours]",
+                "Operating System": "[variables('tagValues')[parameters('resourceTags')].OperatingSystem]",
+                "OS Distribution": "[variables('tagValues')[parameters('resourceTags')].OSDistribution]",
+                "Availability Days": "[variables('tagValues')[parameters('resourceTags')].AvailabilityDays]",
+                "Function": "[variables('tagValues')[parameters('resourceTags')].Function]",
+                "Availability Start Time": "[variables('tagValues')[parameters('resourceTags')].AvailabilityStartTime]",
+                "Availability Stop Time": "[variables('tagValues')[parameters('resourceTags')].AvailabilityStopTime]",
+                "AD Domain": "[variables('tagValues')[parameters('resourceTags')].ADDomain]",
+                "Access Type": "[variables('tagValues')[parameters('resourceTags')].AccessType]",
+                "85 Percent STIG": "[variables('tagValues')[parameters('resourceTags')].EightyFivePercentSTIG]",
+                "STIG Version": "[variables('tagValues')[parameters('resourceTags')].STIGVersion]",
+                "Open Cat I Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIControlItemCount]",
+                "Open Cat II Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIIControlItemCount]",
+                "Open Cat III Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIIIControlItemCount]",
+                "Availability Time Zone": "[variables('tagValues')[parameters('resourceTags')].AvailabilityTimeZone]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Derived From": "[variables('tagValues')[parameters('resourceTags')].DerivedFrom]",
+                "Template or Blueprint Version": "[variables('tagValues')[parameters('resourceTags')].TemplateBlueprintVersion]",
+                "Is Core Service": "[variables('tagValues')[parameters('resourceTags')].IsCoreService]",
+                "Is Security Support Structure": "[variables('tagValues')[parameters('resourceTags')].IsSecuritySupportStructure]",
+                "Environment": "[variables('tagValues')[parameters('resourceTags')].Environment]",
+                "Associated Application": "[variables('tagValues')[parameters('resourceTags')].AssociatedApplication]",
+                "Resource Expiration Date": "[variables('tagValues')[parameters('resourceTags')].ResourceExpirationDate]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "Standard_B2s"
+                },
+                "osProfile": {
+                    "computerName": "gateway",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[variables('imagePublisher')]",
+                        "offer": "[variables('imageOffer')]",
+                        "sku": "[parameters('imageSKU')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "osdisk",
+                        "vhd": {
+                            "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')),'2016-01-01').primaryEndpoints.blob,variables('uniqueStorageAccountContainerName'),'/','gw-vm-os-disk.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces','GW-NIC')]"
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "type": "Microsoft.Compute/virtualMachines/extensions",
+                    "apiVersion": "2015-06-15",
+                    "name": "GW-VMS-01/gateway",
+                    "location": "[parameters('location')]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Compute/virtualMachines', 'GW-VMS-01')]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Powershell",
+                        "type": "DSC",
+                        "typeHandlerVersion": "2.11",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "modulesUrl": "[concat(variables('assetLocation'),'/Configuration.zip')]",
+                            "configurationFunction": "Configuration.ps1\\Gateway",
+                            "Properties": {
+                                "DomainName": "[parameters('adDomainName')]",
+                                "AdminCreds": {
+                                    "UserName": "[parameters('adminUsername')]",
+                                    "Password": "PrivateSettingsRef:AdminPassword"
+                                }
+                            }
+                        },
+                        "protectedSettings": {
+                            "Items": {
+                                "AdminPassword": "[parameters('adminPassword')]"
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2015-06-15",
+            "name": "[concat('RD-SHVM-', copyindex())]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
+                "[concat('Microsoft.Network/networkInterfaces/', 'rdsh-', copyindex(), '-nic')]"
+            ],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Internal VM Size": "[variables('tagValues')[parameters('resourceTags')].InternalVMSize]",
+                "Built From Template": "[variables('tagValues')[parameters('resourceTags')].BuiltFromTemplate]",
+                "Change Management System": "[variables('tagValues')[parameters('resourceTags')].ChangeManagementSystem]",
+                "Operating Hours": "[variables('tagValues')[parameters('resourceTags')].OperatingHours]",
+                "Operating System": "[variables('tagValues')[parameters('resourceTags')].OperatingSystem]",
+                "OS Distribution": "[variables('tagValues')[parameters('resourceTags')].OSDistribution]",
+                "Availability Days": "[variables('tagValues')[parameters('resourceTags')].AvailabilityDays]",
+                "Function": "[variables('tagValues')[parameters('resourceTags')].Function]",
+                "Availability Start Time": "[variables('tagValues')[parameters('resourceTags')].AvailabilityStartTime]",
+                "Availability Stop Time": "[variables('tagValues')[parameters('resourceTags')].AvailabilityStopTime]",
+                "AD Domain": "[variables('tagValues')[parameters('resourceTags')].ADDomain]",
+                "Access Type": "[variables('tagValues')[parameters('resourceTags')].AccessType]",
+                "85 Percent STIG": "[variables('tagValues')[parameters('resourceTags')].EightyFivePercentSTIG]",
+                "STIG Version": "[variables('tagValues')[parameters('resourceTags')].STIGVersion]",
+                "Open Cat I Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIControlItemCount]",
+                "Open Cat II Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIIControlItemCount]",
+                "Open Cat III Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIIIControlItemCount]",
+                "Availability Time Zone": "[variables('tagValues')[parameters('resourceTags')].AvailabilityTimeZone]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Derived From": "[variables('tagValues')[parameters('resourceTags')].DerivedFrom]",
+                "Template or Blueprint Version": "[variables('tagValues')[parameters('resourceTags')].TemplateBlueprintVersion]",
+                "Is Core Service": "[variables('tagValues')[parameters('resourceTags')].IsCoreService]",
+                "Is Security Support Structure": "[variables('tagValues')[parameters('resourceTags')].IsSecuritySupportStructure]",
+                "Environment": "[variables('tagValues')[parameters('resourceTags')].Environment]",
+                "Associated Application": "[variables('tagValues')[parameters('resourceTags')].AssociatedApplication]",
+                "Resource Expiration Date": "[variables('tagValues')[parameters('resourceTags')].ResourceExpirationDate]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('rdshVmSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[concat('RD-SHVM-', copyIndex())]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[variables('imagePublisher')]",
+                        "offer": "[variables('imageOffer')]",
+                        "sku": "[parameters('imageSKU')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "osdisk",
+                        "vhd": {
+                            "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')),'2016-01-01').primaryEndpoints.blob,variables('uniqueStorageAccountContainerName'),'/','rdsh-',copyindex(),'-os-disk.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces',concat('rdsh-', copyindex(), '-nic'))]"
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "type": "Microsoft.Compute/virtualMachines/extensions",
+                    "apiVersion": "2015-06-15",
+                    "name": "[concat('RD-SHVM-', copyindex(),'/sessionhost')]",
+                    "location": "[parameters('location')]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Compute/virtualMachines', concat('RD-SHVM-', copyindex()))]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Powershell",
+                        "type": "DSC",
+                        "typeHandlerVersion": "2.11",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "ModulesUrl": "[concat(variables('assetLocation'),'/Configuration.zip')]",
+                            "ConfigurationFunction": "Configuration.ps1\\SessionHost",
+                            "Properties": {
+                                "DomainName": "[parameters('adDomainName')]",
+                                "AdminCreds": {
+                                    "UserName": "[parameters('adminUsername')]",
+                                    "Password": "PrivateSettingsRef:AdminPassword"
+                                }
+                            }
+                        },
+                        "protectedSettings": {
+                            "Items": {
+                                "AdminPassword": "[parameters('adminPassword')]"
+                            }
+                        }
+                    }
+                }
+            ],
+            "copy": {
+                "name": "rdsh-vm-loop",
+                "count": "[parameters('numberOfRdshInstances')]"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2015-06-15",
+            "name": "CB-VMS-01",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
+                "Microsoft.Network/networkInterfaces/CB-NIC",
+                "rdsh-vm-loop"
+            ],
+            "tags": {
+                "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+                "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+                "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+                "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+                "Internal VM Size": "[variables('tagValues')[parameters('resourceTags')].InternalVMSize]",
+                "Built From Template": "[variables('tagValues')[parameters('resourceTags')].BuiltFromTemplate]",
+                "Change Management System": "[variables('tagValues')[parameters('resourceTags')].ChangeManagementSystem]",
+                "Operating Hours": "[variables('tagValues')[parameters('resourceTags')].OperatingHours]",
+                "Operating System": "[variables('tagValues')[parameters('resourceTags')].OperatingSystem]",
+                "OS Distribution": "[variables('tagValues')[parameters('resourceTags')].OSDistribution]",
+                "Availability Days": "[variables('tagValues')[parameters('resourceTags')].AvailabilityDays]",
+                "Function": "[variables('tagValues')[parameters('resourceTags')].Function]",
+                "Availability Start Time": "[variables('tagValues')[parameters('resourceTags')].AvailabilityStartTime]",
+                "Availability Stop Time": "[variables('tagValues')[parameters('resourceTags')].AvailabilityStopTime]",
+                "AD Domain": "[variables('tagValues')[parameters('resourceTags')].ADDomain]",
+                "Access Type": "[variables('tagValues')[parameters('resourceTags')].AccessType]",
+                "85 Percent STIG": "[variables('tagValues')[parameters('resourceTags')].EightyFivePercentSTIG]",
+                "STIG Version": "[variables('tagValues')[parameters('resourceTags')].STIGVersion]",
+                "Open Cat I Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIControlItemCount]",
+                "Open Cat II Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIIControlItemCount]",
+                "Open Cat III Control Item Count": "[variables('tagValues')[parameters('resourceTags')].OpenCatIIIControlItemCount]",
+                "Availability Time Zone": "[variables('tagValues')[parameters('resourceTags')].AvailabilityTimeZone]",
+                "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+                "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+                "Derived From": "[variables('tagValues')[parameters('resourceTags')].DerivedFrom]",
+                "Template or Blueprint Version": "[variables('tagValues')[parameters('resourceTags')].TemplateBlueprintVersion]",
+                "Is Core Service": "[variables('tagValues')[parameters('resourceTags')].IsCoreService]",
+                "Is Security Support Structure": "[variables('tagValues')[parameters('resourceTags')].IsSecuritySupportStructure]",
+                "Environment": "[variables('tagValues')[parameters('resourceTags')].Environment]",
+                "Associated Application": "[variables('tagValues')[parameters('resourceTags')].AssociatedApplication]",
+                "Resource Expiration Date": "[variables('tagValues')[parameters('resourceTags')].ResourceExpirationDate]",
+                "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",
+                "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]",
+                "DNS Name": ""
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "Standard_B2s"
+                },
+                "osProfile": {
+                    "computerName": "broker",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "adminPassword": "[parameters('adminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[variables('imagePublisher')]",
+                        "offer": "[variables('imageOffer')]",
+                        "sku": "[parameters('imageSKU')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "osdisk",
+                        "vhd": {
+                            "uri": "[concat(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')),'2016-01-01').primaryEndpoints.blob,variables('uniqueStorageAccountContainerName'),'/','cb-vm-os-disk.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces','CB-NIC')]"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "apiVersion": "2015-06-15",
+            "name": "cb-vm/rdsdeployment",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines', 'CB-VMS-01')]",
+                "Microsoft.Compute/virtualMachines/gw-vm/extensions/gateway",
+                "rdsh-vm-loop"
+            ],
+            "properties": {
+                "autoUpgradeMinorVersion": true,
+                "protectedSettings": {
+                    "Items": {
+                        "adminPassword": "[parameters('adminPassword')]"
+                    }
+                },
+                "publisher": "Microsoft.Powershell",
+                "settings": {
+                    "modulesUrl": "[concat(variables('assetLocation'),'/Configuration.zip')]",
+                    "configurationFunction": "Configuration.ps1\\RDSDeployment",
+                    "Properties": {
+                        "adminCreds": {
+                            "UserName": "[parameters('adminUsername')]",
+                            "Password": "PrivateSettingsRef:adminPassword"
+                        },
+                        "connectionBroker": "[concat('broker.',parameters('adDomainName'))]",
+                        "domainName": "[parameters('adDomainName')]",
+                        "externalfqdn": "[reference(parameters('gwpublicIPAddressName')).dnsSettings.fqdn]",
+                        "numberOfRdshInstances": "[parameters('numberOfRdshInstances')]",
+                        "sessionHostNamingPrefix": "rdsh-",
+                        "webAccessServer": "[concat('gateway.',parameters('adDomainName'))]"
+                    }
+                },
+                "type": "DSC",
+                "typeHandlerVersion": "2.11"
+            }
+        }
+    ]
+}

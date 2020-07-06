@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageAccountName": {
+      "type": "string",
+      "defaultValue": "[concat('storage', uniqueString(resourceGroup().id))]"
+    },
+    "newOrExisting": {
+      "type": "string",
+      "allowedValues": [
+        "new",
+        "existing"
+      ]
+    },
+    	"resourceTags": {
+			"type": "string",
+			"allowedValues":[
+				"all"
+			]
+		},
+        "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources."
+      }
+    }
+  },
+  "variables": {
+
+    "tagValues": {
+			"all": {
+				
+                "BusinessCapability": "Core Services",
+                "BusinessTeam": "Cloud Services Group",
+				"Capability": "Bastion",
+				"CreatedBy": "Rex Trotter",
+				"CreatedOn": "4/6/20",
+				"Program": "CS",
+				"SystemOwner": "Rex Trotter",
+				"SystemOwnerTeam": "Cloud Engineering & Mission Assurance"            
+			}
+		}
+  },
+  "resources": [
+    {
+      "condition": "[equals(parameters('newOrExisting'),'new')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2018-11-01",
+      "name": "[parameters('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "Storage",
+      "properties": {},
+      "tags": {
+          "Program": "[variables('tagValues')[parameters('resourceTags')].Program]",
+          "System Owner": "[variables('tagValues')[parameters('resourceTags')].SystemOwner]",
+          "System Owner Team": "[variables('tagValues')[parameters('resourceTags')].SystemOwnerTeam]",
+          "Capability": "[variables('tagValues')[parameters('resourceTags')].Capability]",
+          "Created By": "[variables('tagValues')[parameters('resourceTags')].CreatedBy]",
+          "Created On": "[variables('tagValues')[parameters('resourceTags')].CreatedOn]",
+          "Business Capability": "[variables('tagValues')[parameters('resourceTags')].BusinessCapability]",   
+          "Business Team": "[variables('tagValues')[parameters('resourceTags')].BusinessTeam]"
+      }
+    }
+
+]
+
+}
